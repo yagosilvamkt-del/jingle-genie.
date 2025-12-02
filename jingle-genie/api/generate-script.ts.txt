@@ -1,0 +1,54 @@
+import { GoogleGenAI } from "@google/genai";
+
+export const config = {
+  runtime: 'edge',
+};
+
+export default async function handler(req: Request) {
+  if (req.method !== 'POST') {
+    return new Response('Method Not Allowed', { status: 405 });
+  }
+
+  try {
+    const { rawText, trackName } = await req.json();
+    const apiKey = process.env.API_KEY;
+
+    if (!apiKey) {
+      return new Response(JSON.stringify({ error: 'Chave de API não configurada no servidor' }), { 
+        status: 500,
+        headers: { 'Content-Type': 'application/json' }
+      });
+    }
+
+    const ai = new GoogleGenAI({ apiKey });
+    
+    const prompt = `
+      Você é um redator profissional de rádio.
+      Eu tenho um texto bruto para um anúncio: "${rawText}".
+      A trilha de fundo tem o estilo "${trackName}" e duração total de 40 segundos.
+      
+      Reescreva este texto para ser impactante, envolvente e adequado para uma locução comercial.
+      IMPORTANTE: O texto DEVE ter no máximo 60 palavras para ser lido confortavelmente em 35 segundos.
+      Seja conciso.
+      Use linguagem simples em Português do Brasil.
+      Não adicione indicações de efeitos sonoros como [SFX] ou [Música]. Apenas as palavras faladas.
+      Retorne APENAS o texto a ser falado, sem aspas.
+    `;
+
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash',
+      contents: prompt,
+    });
+
+    const polishedText = response.text?.trim() || rawText;
+
+    return new Response(JSON.stringify({ text: polishedText }), {
+      status: 200,
+      headers: { 'Content-Type': 'application/json' }
+    });
+
+  } catch (error: any) {
+    console.error('Erro na API generate-script:', error);
+    return new Response(JSON.stringify({ error: error.message }), { status: 500 });
+  }
+}
